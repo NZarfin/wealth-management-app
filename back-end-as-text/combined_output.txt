@@ -1,0 +1,669 @@
+### /Users/nadav_mbp_m/Documents/DevSecOps-NadavZarfin/wealth-management-app/back-end//app/config.py ###
+import os
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
+
+class Config:
+    # Database configuration
+    SQLALCHEMY_DATABASE_URI = os.getenv('DATABASE_URL', f'mysql+pymysql://{os.getenv("DB_USER")}:{os.getenv("DB_PASSWORD")}@mysql-db/{os.getenv("DB_NAME")}')
+    SQLALCHEMY_TRACK_MODIFICATIONS = False
+    
+    # Flask configuration
+    SECRET_KEY = os.getenv('SECRET_KEY', 'you-will-never-guess')
+    FLASK_ENV = os.getenv('FLASK_ENV', 'production')
+
+###
+
+### /Users/nadav_mbp_m/Documents/DevSecOps-NadavZarfin/wealth-management-app/back-end//app/Dockerfile ###
+# Use an official Python runtime as a parent image
+FROM python:3.9-slim
+
+# Set environment variables
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+
+# Set the working directory in the container
+WORKDIR /app
+
+# Copy the requirements file
+COPY app/requirements.txt /app/requirements.txt
+
+# Install dependencies
+RUN pip install --upgrade pip
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy the rest of the application code
+COPY app/ /app/
+
+# Expose port 8081
+EXPOSE 8081
+
+# Set environment variables for the Flask app
+ENV FLASK_APP=app.py
+ENV FLASK_RUN_HOST=0.0.0.0
+ENV FLASK_RUN_PORT=8081
+
+# Run the Flask application
+CMD ["flask", "run"]
+
+###
+
+### /Users/nadav_mbp_m/Documents/DevSecOps-NadavZarfin/wealth-management-app/back-end//app/__init__.py ###
+from flask import Flask
+from .config import Config
+from .models import db
+from .routes import auth_bp, clients_bp, transactions_bp
+
+def create_app():
+    app = Flask(__name__)
+    app.config.from_object(Config)
+
+    # Initialize database
+    db.init_app(app)
+
+    # Register blueprints
+    app.register_blueprint(auth_bp)
+    app.register_blueprint(clients_bp)
+    app.register_blueprint(transactions_bp)
+
+    return app
+
+###
+
+### /Users/nadav_mbp_m/Documents/DevSecOps-NadavZarfin/wealth-management-app/back-end//app/utils/db.py ###
+from flask_sqlalchemy import SQLAlchemy
+
+db = SQLAlchemy()
+
+def init_db(app):
+    db.init_app(app)
+    with app.app_context():
+        db.create_all()
+
+###
+
+### /Users/nadav_mbp_m/Documents/DevSecOps-NadavZarfin/wealth-management-app/back-end//app/utils/security.py ###
+from werkzeug.security import generate_password_hash, check_password_hash
+
+def hash_password(password):
+    return generate_password_hash(password)
+
+def verify_password(password_hash, password):
+    return check_password_hash(password_hash, password)
+
+###
+
+### /Users/nadav_mbp_m/Documents/DevSecOps-NadavZarfin/wealth-management-app/back-end//app/utils/__init__.py ###
+from .db import db, init_db
+from .security import hash_password, verify_password
+
+__all__ = ['db', 'init_db', 'hash_password', 'verify_password']
+
+###
+
+### /Users/nadav_mbp_m/Documents/DevSecOps-NadavZarfin/wealth-management-app/back-end//app/models/user.py ###
+from ..utils.db import db
+from ..utils.security import hash_password, verify_password
+
+class User(db.Model):
+    __tablename__ = 'users'
+
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(50), unique=True, nullable=False)
+    password_hash = db.Column(db.String(255), nullable=False)
+    email = db.Column(db.String(100), nullable=False)
+
+    clients = db.relationship('Client', backref='user', cascade="all, delete-orphan", nullable=False)
+
+    def set_password(self, password):
+        self.password_hash = hash_password(password)
+
+    def check_password(self, password):
+        return verify_password(self.password_hash, password)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'username': self.username,
+            'email': self.email
+        }
+
+###
+
+### /Users/nadav_mbp_m/Documents/DevSecOps-NadavZarfin/wealth-management-app/back-end//app/models/transaction.py ###
+from ..utils.db import db
+from sqlalchemy.types import Enum as SqlEnum
+import enum
+
+class TransactionType(enum.Enum):
+    credit = 'credit'
+    debit = 'debit'
+
+class Transaction(db.Model):
+    __tablename__ = 'transactions'
+
+    id = db.Column(db.Integer, primary_key=True)
+    client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=False)
+    date = db.Column(db.Date, nullable=False)
+    amount = db.Column(db.Numeric(10, 2), nullable=False)
+    type = db.Column(SqlEnum(TransactionType), nullable=False)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'client_id': self.client_id,
+            'date': self.date.isoformat(),
+            'amount': float(self.amount),
+            'type': self.type.value
+        }
+
+###
+
+### /Users/nadav_mbp_m/Documents/DevSecOps-NadavZarfin/wealth-management-app/back-end//app/models/client.py ###
+from ..utils.db import db
+
+class Client(db.Model):
+    __tablename__ = 'clients'
+
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False)
+    email = db.Column(db.String(100), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+
+    transactions = db.relationship('Transaction', backref='client', cascade="all, delete-orphan")
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'name': self.name,
+            'email': self.email,
+            'user_id': self.user_id
+        }
+
+###
+
+### /Users/nadav_mbp_m/Documents/DevSecOps-NadavZarfin/wealth-management-app/back-end//app/models/__init__.py ###
+from .user import User
+from .client import Client
+from .transaction import Transaction
+
+__all__ = ['User', 'Client', 'Transaction']
+
+###
+
+### /Users/nadav_mbp_m/Documents/DevSecOps-NadavZarfin/wealth-management-app/back-end//app/app.py ###
+from . import create_app
+from .utils.db import init_db
+
+app = create_app()
+
+# Initialize the database
+with app.app_context():
+    init_db(app)
+
+if __name__ == '__main__':
+    app.run()
+
+###
+
+### /Users/nadav_mbp_m/Documents/DevSecOps-NadavZarfin/wealth-management-app/back-end//app/routes/auth.py ###
+from flask import Blueprint, request, jsonify
+from ..models.user import User, db
+
+auth_bp = Blueprint('auth_bp', __name__)
+
+@auth_bp.route('/login', methods=['POST'])
+def login():
+    data = request.get_json()
+    username = data.get('username')
+    password = data.get('password')
+
+    user = User.query.filter_by(username=username).first()
+
+    if user and user.check_password(password):
+        # In a real app, generate and return JWT token
+        return jsonify({'message': 'Login successful', 'user': user.to_dict()}), 200
+    else:
+        return jsonify({'error': 'Invalid username or password'}), 401
+
+@auth_bp.route('/register', methods=['POST'])
+def register():
+    data = request.get_json()
+    username = data.get('username')
+    password = data.get('password')
+    email = data.get('email')
+
+    if User.query.filter_by(username=username).first():
+        return jsonify({'error': 'Username already exists'}), 400
+
+    new_user = User(username=username, email=email)
+    new_user.set_password(password)
+    db.session.add(new_user)
+    db.session.commit()
+
+    return jsonify({'message': 'User registered successfully', 'user': new_user.to_dict()}), 201
+
+#add password strength checker - aws maybe.
+###
+
+### /Users/nadav_mbp_m/Documents/DevSecOps-NadavZarfin/wealth-management-app/back-end//app/routes/transactions.py ###
+from flask import Blueprint, request, jsonify
+from ..models.transaction import Transaction, db , TransactionType
+from ..models.client import Client
+
+transactions_bp = Blueprint('transactions_bp', __name__)
+
+@transactions_bp.route('/transactions', methods=['GET'])
+def get_transactions():
+    client_id = request.args.get('client_id')
+    if client_id:
+        transactions = Transaction.query.filter_by(client_id=client_id).all()
+    else:
+        transactions = Transaction.query.all()
+    return jsonify([transaction.to_dict() for transaction in transactions]), 200
+
+@transactions_bp.route('/transactions/<int:transaction_id>', methods=['GET'])
+def get_transaction(transaction_id):
+    transaction = Transaction.query.get(transaction_id)
+    if transaction:
+        return jsonify(transaction.to_dict()), 200
+    else:
+        return jsonify({'error': 'Transaction not found'}), 404
+
+@transactions_bp.route('/transactions', methods=['POST'])
+def create_transaction():
+    data = request.get_json()
+    client_id = data.get('client_id')
+    date = data.get('date')
+    amount = data.get('amount')
+    transaction_type = data.get('type')
+
+    if not Client.query.get(client_id):
+        return jsonify({'error': 'Client not found'}), 404
+
+    new_transaction = Transaction(
+        client_id=client_id,
+        date=date,
+        amount=amount,
+        type=TransactionType(transaction_type)
+    )
+    db.session.add(new_transaction)
+    db.session.commit()
+
+    return jsonify({'message': 'Transaction created successfully', 'transaction': new_transaction.to_dict()}), 201
+
+@transactions_bp.route('/transactions/<int:transaction_id>', methods=['DELETE'])
+def delete_transaction(transaction_id):
+    transaction = Transaction.query.get(transaction_id)
+    if not transaction:
+        return jsonify({'error': 'Transaction not found'}), 404
+
+    db.session.delete(transaction)
+    db.session.commit()
+
+    return jsonify({'message': 'Transaction deleted successfully'}), 200
+
+###
+
+### /Users/nadav_mbp_m/Documents/DevSecOps-NadavZarfin/wealth-management-app/back-end//app/routes/__init__.py ###
+from .auth import auth_bp
+from .clients import clients_bp
+from .transactions import transactions_bp
+
+__all__ = ['auth_bp', 'clients_bp', 'transactions_bp']
+
+###
+
+### /Users/nadav_mbp_m/Documents/DevSecOps-NadavZarfin/wealth-management-app/back-end//app/routes/clients.py ###
+from flask import Blueprint, request, jsonify
+from ..models.client import Client, db
+from ..models.user import User
+
+clients_bp = Blueprint('clients_bp', __name__)
+
+@clients_bp.route('/clients', methods=['GET'])
+def get_clients():
+    clients = Client.query.all()
+    return jsonify([client.to_dict() for client in clients]), 200
+
+@clients_bp.route('/clients/<int:client_id>', methods=['GET'])
+def get_client(client_id):
+    client = Client.query.get(client_id)
+    if client:
+        return jsonify(client.to_dict()), 200
+    else:
+        return jsonify({'error': 'Client not found'}), 404
+
+@clients_bp.route('/clients', methods=['POST'])
+def create_client():
+    data = request.get_json()
+    name = data.get('name')
+    email = data.get('email')
+    user_id = data.get('user_id')
+
+    if not User.query.get(user_id):
+        return jsonify({'error': 'User not found'}), 404
+
+    new_client = Client(name=name, email=email, user_id=user_id)
+    db.session.add(new_client)
+    db.session.commit()
+
+    return jsonify({'message': 'Client created successfully', 'client': new_client.to_dict()}), 201
+
+@clients_bp.route('/clients/<int:client_id>', methods=['PUT'])
+def update_client(client_id):
+    client = Client.query.get(client_id)
+    if not client:
+        return jsonify({'error': 'Client not found'}), 404
+
+    data = request.get_json()
+    client.name = data.get('name', client.name)
+    client.email = data.get('email', client.email)
+
+    db.session.commit()
+
+    return jsonify({'message': 'Client updated successfully', 'client': client.to_dict()}), 200
+
+@clients_bp.route('/clients/<int:client_id>', methods=['DELETE'])
+def delete_client(client_id):
+    client = Client.query.get(client_id)
+    if not client:
+        return jsonify({'error': 'Client not found'}), 404
+
+    db.session.delete(client)
+    db.session.commit()
+
+    return jsonify({'message': 'Client deleted successfully'}), 200
+
+###
+
+### /Users/nadav_mbp_m/Documents/DevSecOps-NadavZarfin/wealth-management-app/back-end//requirements.txt ###
+Flask==2.0.1
+Flask-SQLAlchemy==2.5.1
+PyMySQL==1.0.2
+Werkzeug==2.0.1
+python-dotenv==0.19.0
+Flask-Testing==0.8.1  # Added for testing
+python-dotenv==0.19.0
+###
+
+### /Users/nadav_mbp_m/Documents/DevSecOps-NadavZarfin/wealth-management-app/back-end//test/test_app.py ###
+import unittest
+from flask_testing import TestCase
+from app import create_app
+from app.utils.db import db
+from app.models.user import User
+
+class BasicTests(TestCase):
+    def create_app(self):
+        # Set up the test configuration for the Flask app
+        app = create_app()
+        app.config['TESTING'] = True
+        app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///:memory:'  # Use in-memory SQLite for tests
+        app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+        return app
+
+    def setUp(self):
+        # Create the database schema
+        with self.app.app_context():
+            db.create_all()
+
+            # Add a test user
+            test_user = User(username='testuser', email='test@example.com')
+            test_user.set_password('testpass')
+            db.session.add(test_user)
+            db.session.commit()
+
+    def tearDown(self):
+        # Tear down the database
+        with self.app.app_context():
+            db.session.remove()
+            db.drop_all()
+
+    def test_home_page(self):
+        # Test that the home page returns 404 since no '/' route is defined
+        response = self.client.get('/')
+        self.assertEqual(response.status_code, 404)
+
+    def test_register_user(self):
+        # Test user registration
+        response = self.client.post('/register', json={
+            'username': 'newuser',
+            'password': 'newpass',
+            'email': 'new@example.com'
+        })
+        self.assertEqual(response.status_code, 201)
+        self.assertIn('User registered successfully', response.json['message'])
+
+    def test_register_existing_user(self):
+        # Test registering a user with an existing username
+        response = self.client.post('/register', json={
+            'username': 'testuser',  # This user already exists
+            'password': 'testpass',
+            'email': 'test2@example.com'
+        })
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('Username already exists', response.json['error'])
+
+    def test_login_success(self):
+        # Test successful login
+        response = self.client.post('/login', json={
+            'username': 'testuser',
+            'password': 'testpass'
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('Login successful', response.json['message'])
+
+    def test_login_invalid_user(self):
+        # Test login with invalid credentials
+        response = self.client.post('/login', json={
+            'username': 'nonexistent',
+            'password': 'wrongpass'
+        })
+        self.assertEqual(response.status_code, 401)
+        self.assertIn('Invalid username or password', response.json['error'])
+
+if __name__ == '__main__':
+    unittest.main()
+
+###
+
+### /Users/nadav_mbp_m/Documents/DevSecOps-NadavZarfin/wealth-management-app/back-end//sql-server/SQL_AWS_Test/Jenkinsfile ###
+pipeline {
+    agent {
+        docker {
+            image 'docker:latest'
+            args '--privileged -v /var/run/docker.sock:/var/run/docker.sock'
+        }
+    }
+
+    environment {
+        SECRET_NAME = 'wealth-management-db-credentials'
+        REGION = 'us-west-2'
+        CREDENTIALS_FILE = 'db_credentials.json'
+        DOCKER_NETWORK = 'backend-network'
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+        
+        stage('Retrieve Database Credentials') {
+            steps {
+                sh '''
+                aws secretsmanager get-secret-value --secret-id ${SECRET_NAME} --region ${REGION} --query SecretString --output text > ${CREDENTIALS_FILE}
+                '''
+            }
+        }
+        
+        stage('Set up Docker Network') {
+            steps {
+                sh 'docker network create ${DOCKER_NETWORK} || true'
+            }
+        }
+
+        stage('Run MySQL') {
+            steps {
+                script {
+                    def dbCredentials = readJSON file: "${CREDENTIALS_FILE}"
+                    env.DB_NAME = dbCredentials.DB_NAME
+                    env.DB_USER = dbCredentials.DB_USER
+                    env.DB_PASSWORD = dbCredentials.DB_PASSWORD
+                }
+
+                sh '''
+                docker run -d --name mysql-db --network=${DOCKER_NETWORK} \
+                    -e MYSQL_ROOT_PASSWORD=rootpassword \
+                    -e MYSQL_DATABASE=${DB_NAME} \
+                    -e MYSQL_USER=${DB_USER} \
+                    -e MYSQL_PASSWORD=${DB_PASSWORD} \
+                    mysql:latest
+                '''
+            }
+        }
+
+        stage('Build and Test Flask App') {
+            steps {
+                sh '''
+                docker build -t flask-app .
+                '''
+
+                sh '''
+                docker run -d --name flask-app --network=${DOCKER_NETWORK} \
+                    -e DB_HOST=mysql-db \
+                    -e DB_NAME=${DB_NAME} \
+                    -e DB_USER=${DB_USER} \
+                    -e DB_PASSWORD=${DB_PASSWORD} \
+                    -p 8081:8081 flask-app
+                '''
+
+                sh '''
+                docker exec flask-app pytest
+                '''
+            }
+        }
+        
+        stage('Deploy') {
+            steps {
+                echo "Deploying app..."
+            }
+        }
+    }
+
+    post {
+        always {
+            sh '''
+            docker stop mysql-db flask-app || true
+            docker rm mysql-db flask-app || true
+            docker network rm ${DOCKER_NETWORK} || true
+            rm -f ${CREDENTIALS_FILE}
+            '''
+        }
+    }
+}
+
+###
+
+### /Users/nadav_mbp_m/Documents/DevSecOps-NadavZarfin/wealth-management-app/back-end//sql-server/docker-compose.yml ###
+version: '3.8'
+
+services:
+  mysql-db:
+    image: mysql:latest
+    container_name: mysql-db
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: ${DB_NAME}
+      MYSQL_USER: ${DB_USER}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - mysql_data:/var/lib/mysql
+    ports:
+      - "3306:3306"
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: backend
+    environment:    
+      DB_HOST: mysql-db
+      DATABASE_URL: mysql+pymysql://wealth_user:wealth_password@mysql-db:3306/wealth_db
+      DB_NAME: ${DB_NAME}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+    ports:
+      - "8081:8081"
+    depends_on:
+      - mysql-db
+    networks:
+      - backend-network
+
+volumes:
+  mysql_data:
+
+networks:
+  backend-network:
+
+
+###
+
+### /Users/nadav_mbp_m/Documents/DevSecOps-NadavZarfin/wealth-management-app/back-end//sql-server/aws-secret-sql.json ###
+{
+    "DB_NAME": "wealth_db",
+    "DB_USER": "wealth_user",
+    "DB_PASSWORD": "wealth_password"
+}
+
+
+###
+
+### /Users/nadav_mbp_m/Documents/DevSecOps-NadavZarfin/wealth-management-app/back-end//sql-server/db_init.sql ###
+-- Create users table
+CREATE TABLE IF NOT EXISTS users (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    username VARCHAR(50) NOT NULL UNIQUE,
+    password_hash VARCHAR(255) NOT NULL,
+    email VARCHAR(100) NOT NULL
+);
+
+-- Create clients table
+CREATE TABLE IF NOT EXISTS clients (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    email VARCHAR(100) NOT NULL,
+    user_id INT NOT NULL,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+-- Create transactions table
+CREATE TABLE IF NOT EXISTS transactions (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    client_id INT NOT NULL,
+    date DATE NOT NULL,
+    amount DECIMAL(10, 2) NOT NULL,
+    type ENUM('credit', 'debit') NOT NULL,
+    FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE
+);
+
+-- Insert initial data into users table
+INSERT INTO users (username, password_hash, email) VALUES
+('admin', '$2b$12$KIXQmQnEnWwZT9wDF6B6O.y5m.E1xDFnBh/Pc9n8tK03/k.Zdc3t2', 'admin@example.com');
+
+-- Insert initial data into clients table
+INSERT INTO clients (name, email, user_id) VALUES
+('John Doe', 'john@example.com', 1);
+
+-- Insert initial data into transactions table
+INSERT INTO transactions (client_id, date, amount, type) VALUES
+(1, '2024-01-01', 500.00, 'credit'),
+(1, '2024-01-02', 200.00, 'debit');
+
+###
+

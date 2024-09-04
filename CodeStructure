@@ -1,0 +1,29 @@
+wealth-management-app/
+│
+├── Jenkinsfile                    # Jenkins pipeline configuration file (goes here)
+│
+└── back-end/
+    ├── app/                        # Main Flask app directory
+    │   ├── __init__.py              # Flask app factory and blueprint registration
+    │   ├── app.py                   # Application entry point, creates and runs the app
+    │   ├── config.py                # App configuration (e.g., Flask settings, DB connection)
+    │   ├── models/                  # Database models for the app
+    │   │   ├── __init__.py          # Exports models (User, Client, Transaction)
+    │   │   ├── user.py              # User model with password hashing and relationships
+    │   │   ├── client.py            # Client model with foreign key relationship to User
+    │   │   ├── transaction.py       # Transaction model with enum for transaction types
+    │   ├── routes/                  # Flask blueprints for different API endpoints
+    │   │   ├── __init__.py          # Imports all blueprints (auth, clients, transactions)
+    │   │   ├── auth.py              # Authentication routes (login, register)
+    │   │   ├── clients.py           # Client-related routes (CRUD for clients)
+    │   │   ├── transactions.py      # Transaction-related routes (CRUD for transactions)
+    │   ├── utils/                   # Utility functions (DB and security)
+    │   │   ├── __init__.py          # Imports for utility functions (DB init, security)
+    │   │   ├── db.py                # Database initialization (SQLAlchemy setup)
+    │   │   ├── security.py          # Password hashing and verification (using Werkzeug)
+    │   └── templates/               # Directory for HTML templates (if you plan to add them)
+    │
+    ├── Dockerfile                   # Dockerfile for building the Flask app container
+    ├── requirements.txt             # Python dependencies for the app
+    └── test/
+        ├── test_app.py              # Unit tests for the backend (auth, registration, etc.)

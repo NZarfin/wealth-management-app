@@ -1,0 +1,95 @@
+pipeline {
+    agent {
+        docker {
+            image 'docker:latest'
+            args '--privileged -v /var/run/docker.sock:/var/run/docker.sock'
+        }
+    }
+
+    environment {
+        SECRET_NAME = 'wealth-management-db-credentials'
+        REGION = 'us-west-2'
+        CREDENTIALS_FILE = 'db_credentials.json'
+        DOCKER_NETWORK = 'backend-network'
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+        
+        stage('Retrieve Database Credentials') {
+            steps {
+                sh '''
+                aws secretsmanager get-secret-value --secret-id ${SECRET_NAME} --region ${REGION} --query SecretString --output text > ${CREDENTIALS_FILE}
+                '''
+            }
+        }
+        
+        stage('Set up Docker Network') {
+            steps {
+                sh 'docker network create ${DOCKER_NETWORK} || true'
+            }
+        }
+
+        stage('Run MySQL') {
+            steps {
+                script {
+                    def dbCredentials = readJSON file: "${CREDENTIALS_FILE}"
+                    env.DB_NAME = dbCredentials.DB_NAME
+                    env.DB_USER = dbCredentials.DB_USER
+                    env.DB_PASSWORD = dbCredentials.DB_PASSWORD
+                }
+
+                sh '''
+                docker run -d --name mysql-db --network=${DOCKER_NETWORK} \
+                    -e MYSQL_ROOT_PASSWORD=rootpassword \
+                    -e MYSQL_DATABASE=${DB_NAME} \
+                    -e MYSQL_USER=${DB_USER} \
+                    -e MYSQL_PASSWORD=${DB_PASSWORD} \
+                    mysql:latest
+                '''
+            }
+        }
+
+        stage('Build and Test Flask App') {
+            steps {
+                sh '''
+                docker build -t flask-app .
+                '''
+
+                sh '''
+                docker run -d --name flask-app --network=${DOCKER_NETWORK} \
+                    -e DB_HOST=mysql-db \
+                    -e DB_NAME=${DB_NAME} \
+                    -e DB_USER=${DB_USER} \
+                    -e DB_PASSWORD=${DB_PASSWORD} \
+                    -p 8081:8081 flask-app
+                '''
+
+                sh '''
+                docker exec flask-app pytest
+                '''
+            }
+        }
+        
+        stage('Deploy') {
+            steps {
+                echo "Deploying app..."
+            }
+        }
+    }
+
+    post {
+        always {
+            sh '''
+            docker stop mysql-db flask-app || true
+            docker rm mysql-db flask-app || true
+            docker network rm ${DOCKER_NETWORK} || true
+            rm -f ${CREDENTIALS_FILE}
+            '''
+        }
+    }
+}
