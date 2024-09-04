@@ -83,11 +83,25 @@ pipeline {
                 '''
             }
         }
-        stage('Executing flask-app:${FLASK_APP_VERSION} dev server') {
+        stage('Executing flask-app in Dev Server') {
             steps {
                 // Start Flask app container, connecting it to the MySQL container
                 sh '''
-                echo "cmon lets get to this stage"
+                # Ensure the old container is not running
+                docker stop flask-app || true
+                docker rm flask-app || true
+
+                # Run the Flask app container in detached mode using gunicorn
+                docker run -d --name flask-app \
+                --network=wealth-management-network \
+                -e DB_HOST=mysql-db \
+                -e DB_NAME=my_secure_database \
+                -e DB_USER=root_user \
+                -e DB_PASSWORD='V!mA6^42bLw9@oEz' \
+                -e SECRET_KEY='Yj$82m!pN29iLKdWk5H' \
+                -p 8881:8081 \
+                flask-app:1.0.0
+                
                 '''
             }
         }
