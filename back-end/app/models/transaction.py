@@ -1,4 +1,4 @@
-from ..utils.db import db
+from utils.db import db
 from sqlalchemy.types import Enum as SqlEnum
 import enum
 

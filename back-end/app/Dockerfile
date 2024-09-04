@@ -1,30 +1,36 @@
-# Use an official Python runtime as a parent image
-FROM python:3.9-slim
+# Stage 1: Compiler - Build the virtual environment and install dependencies
+FROM python:3.9-slim as compiler
 
-# Set environment variables
-ENV PYTHONDONTWRITEBYTECODE=1
+# Create a working directory
+WORKDIR /app/
+
+# Set environment variable to ensure output is not buffered
 ENV PYTHONUNBUFFERED=1
 
-# Set the working directory in the container
-WORKDIR /app
+# Create virtual environment in /opt/venv
+RUN python -m venv /opt/venv
 
-# Copy the requirements file
-COPY app/requirements.txt /app/requirements.txt
+# Activate the virtual environment by updating PATH
+ENV PATH="/opt/venv/bin:$PATH"
 
-# Install dependencies
-RUN pip install --upgrade pip
+# Copy the requirements file and install dependencies in the virtual environment
+COPY ./requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy the rest of the application code
-COPY app/ /app/
+# Stage 2: Runner - Copy the virtual environment and the application code
+FROM python:3.9-slim as runner
 
-# Expose port 8081
-EXPOSE 8081
+# Create a working directory
+WORKDIR /app/
 
-# Set environment variables for the Flask app
-ENV FLASK_APP=app.py
-ENV FLASK_RUN_HOST=0.0.0.0
-ENV FLASK_RUN_PORT=8081
+# Copy the virtual environment from the compiler stage
+COPY --from=compiler /opt/venv /opt/venv
+
+# Activate the virtual environment by updating PATH
+ENV PATH="/opt/venv/bin:$PATH"
+
+# Copy the application code
+COPY . /app/
 
 # Run the Flask application
-CMD ["flask", "run"]
+CMD ["python", "app.py"]

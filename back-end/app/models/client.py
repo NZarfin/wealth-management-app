@@ -1,4 +1,4 @@
-from ..utils.db import db
+from utils.db import db
 
 class Client(db.Model):
     __tablename__ = 'clients'

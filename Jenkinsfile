@@ -1,9 +1,7 @@
+{
 pipeline {
-    agent any
-
-    environment {
-        DOCKER_NETWORK = 'backend-network'
-    }
+    agent any  
+  }
 
     stages {
         stage('Checkout') {
@@ -51,7 +49,7 @@ pipeline {
                 // Start MySQL container using credentials from .env
                 sh '''
                 docker run -d --name mysql-db --network=${DOCKER_NETWORK} \
-                    -e MYSQL_ROOT_PASSWORD=rootpassword \
+                    -e MYSQL_ROOT_PASSWORD=${DB_ROOT_PASSWORD} \
                     -e MYSQL_DATABASE=${DB_NAME} \
                     -e MYSQL_USER=${DB_USER} \
                     -e MYSQL_PASSWORD=${DB_PASSWORD} \
@@ -60,7 +58,7 @@ pipeline {
             }
         }
 
-        stage('Build Flask App') {
+        stage('Build Flask App Image From Docker') {
             steps {
                 // Build the Flask application Docker image
                 sh 'docker build -t flask-app -f back-end/app/Dockerfile .'
@@ -72,7 +70,7 @@ pipeline {
                 // Start Flask app container, connecting it to the MySQL container
                 sh '''
                 docker run -d --name flask-app --network=${DOCKER_NETWORK} \
-                    -e DB_HOST=mysql-db \
+                    -e DB_HOST=${DB_HOST} \
                     -e DB_NAME=${DB_NAME} \
                     -e DB_USER=${DB_USER} \
                     -e DB_PASSWORD=${DB_PASSWORD} \
@@ -87,6 +85,7 @@ pipeline {
                 // Run tests in Flask container
                 sh '''
                 docker exec flask-app pytest --disable-warnings
+                
                 '''
             }
         }
@@ -103,6 +102,7 @@ pipeline {
                 git add .
                 git commit -m "Promote to production branch after successful tests"
                 git push origin production
+                echo "Pushed to production branch"
                 '''
             }
         }
@@ -114,6 +114,7 @@ pipeline {
                 docker stop mysql-db flask-app || true
                 docker rm mysql-db flask-app || true
                 docker network rm ${DOCKER_NETWORK} || true
+                echo "succesfully Cleaned up ${DOCKER_NETWORK}"
                 '''
             }
         }

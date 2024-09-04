@@ -1,5 +1,5 @@
-from ..utils.db import db
-from ..utils.security import hash_password, verify_password
+from utils.db import db
+from utils.security import hash_password, verify_password
 
 class User(db.Model):
     __tablename__ = 'users'
@@ -9,7 +9,7 @@ class User(db.Model):
     password_hash = db.Column(db.String(255), nullable=False)
     email = db.Column(db.String(100), nullable=False)
 
-    clients = db.relationship('Client', backref='user', cascade="all, delete-orphan", nullable=False)
+    clients = db.relationship('Client', backref='user', cascade="all, delete-orphan")
 
     def set_password(self, password):
         self.password_hash = hash_password(password)
