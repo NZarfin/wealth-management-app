@@ -1,6 +1,9 @@
 pipeline {
-    agent any  
-  }
+    agent any
+
+    environment {
+        project-name = 'flask-mysql-app'
+    }
 
     stages {
         stage('Checkout') {
@@ -126,3 +129,4 @@ pipeline {
         }
     }
 
+}
