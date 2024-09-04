@@ -1,4 +1,3 @@
-{
 pipeline {
     agent any  
   }
@@ -126,4 +125,4 @@ pipeline {
             sh 'docker system prune -f'
         }
     }
-}
+
