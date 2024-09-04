@@ -2,7 +2,7 @@ pipeline {
     agent any
 
     environment {
-        project-name = 'flask-mysql-app'
+        PROJECT_NAME = 'flask-mysql-app'
     }
 
     stages {
@@ -33,6 +33,7 @@ pipeline {
                 sh 'docker network create ${DOCKER_NETWORK} || true'
             }
         }
+
         stage('Stop/Remove existing MySQL Service') {
             steps {
                 // Stop and remove any existing MySQL container
@@ -46,6 +47,7 @@ pipeline {
                 '''
             }
         }
+
         stage('Run MySQL') {
             steps {
                 // Start MySQL container using credentials from .env
@@ -87,7 +89,6 @@ pipeline {
                 // Run tests in Flask container
                 sh '''
                 docker exec flask-app pytest --disable-warnings
-                
                 '''
             }
         }
@@ -116,7 +117,7 @@ pipeline {
                 docker stop mysql-db flask-app || true
                 docker rm mysql-db flask-app || true
                 docker network rm ${DOCKER_NETWORK} || true
-                echo "succesfully Cleaned up ${DOCKER_NETWORK}"
+                echo "Successfully cleaned up ${DOCKER_NETWORK}"
                 '''
             }
         }
@@ -128,5 +129,4 @@ pipeline {
             sh 'docker system prune -f'
         }
     }
-
 }
