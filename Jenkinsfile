@@ -73,7 +73,7 @@ pipeline {
             steps {
                 // Start Flask app container, connecting it to the MySQL container
                 sh '''
-                docker run -d --name flask-app:${FLASK_APP_VERSION} --network=${DOCKER_NETWORK} \
+                docker run -d --name flask-app --network=${DOCKER_NETWORK} \
                     -e DB_HOST=${DB_HOST} \
                     -e DB_NAME=${DB_NAME} \
                     -e DB_USER=${DB_USER} \
@@ -87,7 +87,7 @@ pipeline {
             steps {
                 // Start Flask app container, connecting it to the MySQL container
                 sh '''
-                docker 
+                echo "cmon lets get to this stage"
                 '''
             }
         }
