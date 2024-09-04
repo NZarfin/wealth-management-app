@@ -38,12 +38,12 @@ pipeline {
             steps {
                 // Stop and remove any existing MySQL container
                 sh '''
-                docker stop mysql-db || true
-                docker rm mysql-db || true
+                docker stop ${DB_HOST} || true
+                docker rm ${DB_HOST} || true
                 '''
                 // Wait for MySQL to be ready
                 sh '''
-                sleep 15
+                sleep 10
                 '''
             }
         }
@@ -69,17 +69,25 @@ pipeline {
             }
         }
 
-        stage('Run Flask App') {
+        stage('Initialize Flask App') {
             steps {
                 // Start Flask app container, connecting it to the MySQL container
                 sh '''
-                docker run -d --name flask-app --network=${DOCKER_NETWORK} \
+                docker run -d --name flask-app:${FLASK_APP_VERSION} --network=${DOCKER_NETWORK} \
                     -e DB_HOST=${DB_HOST} \
                     -e DB_NAME=${DB_NAME} \
                     -e DB_USER=${DB_USER} \
                     -e DB_PASSWORD=${DB_PASSWORD} \
                     -e SECRET_KEY=${SECRET_KEY} \
                     -p 8081:8081 flask-app
+                '''
+            }
+        }
+        stage('Executing flask-app:${FLASK_APP_VERSION} dev server') {
+            steps {
+                // Start Flask app container, connecting it to the MySQL container
+                sh '''
+                docker 
                 '''
             }
         }

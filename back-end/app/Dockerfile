@@ -13,9 +13,10 @@ RUN python -m venv /opt/venv
 # Activate the virtual environment by updating PATH
 ENV PATH="/opt/venv/bin:$PATH"
 
-# Copy the requirements file and install dependencies in the virtual environment
-COPY ./requirements.txt /app/requirements.txt
-RUN pip install --no-cache-dir -r requirements.txt
+# Install dependencies in the virtual environment
+# Ensure you copy the requirements.txt into the image.
+COPY requirements.txt /app/
+RUN pip install --no-cache-dir -r requirements.txt --verbose
 
 # Stage 2: Runner - Copy the virtual environment and the application code
 FROM python:3.9-slim as runner
@@ -30,7 +31,12 @@ COPY --from=compiler /opt/venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
 # Copy the application code
+# It's good to ensure only necessary files are copied. 
+# Consider using a .dockerignore file to exclude files not needed in the image.
 COPY . /app/
 
-# Run the Flask application
-CMD ["python", "app.py"]
+# Expose the port the app runs on
+EXPOSE 8001
+
+# Define the command to run the Flask application using Gunicorn
+CMD ["gunicorn", "app:app", "-b", "0.0.0.0:8001", "-w", "4"]
