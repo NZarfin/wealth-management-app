@@ -33,7 +33,19 @@ pipeline {
                 sh 'docker network create ${DOCKER_NETWORK} || true'
             }
         }
-
+        stage('Stop/Remove existing MySQL Service') {
+            steps {
+                // Stop and remove any existing MySQL container
+                sh '''
+                docker stop mysql-db || true
+                docker rm mysql-db || true
+                '''
+                // Wait for MySQL to be ready
+                sh '''
+                sleep 15
+                '''
+            }
+        }
         stage('Run MySQL') {
             steps {
                 // Start MySQL container using credentials from .env
